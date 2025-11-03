@@ -16,7 +16,14 @@ import os
 import time
 from pathlib import Path
 
+# timm 0.3.2와 최신 PyTorch 호환성 패치 (torch._six 문제 해결)
+import collections.abc
 import torch
+if not hasattr(torch, '_six'):
+    class _Six:
+        container_abcs = collections.abc
+    torch._six = _Six()
+
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms

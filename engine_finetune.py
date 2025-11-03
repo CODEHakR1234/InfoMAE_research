@@ -13,7 +13,13 @@ import math
 import sys
 from typing import Iterable, Optional
 
+# timm 0.3.2와 최신 PyTorch 호환성 패치 (torch._six 문제 해결)
+import collections.abc
 import torch
+if not hasattr(torch, '_six'):
+    class _Six:
+        container_abcs = collections.abc
+    torch._six = _Six()
 
 from timm.data import Mixup
 from timm.utils import accuracy
