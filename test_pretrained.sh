@@ -2,8 +2,12 @@
 
 # 사전 학습된 MAE 모델 복원 테스트 스크립트
 
-CKPT="./checkpoints/mae_pretrain_vit_large.pth"
-MODEL="mae_vit_large_patch16"
+# 스크립트 디렉토리로 이동
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
+
+CKPT="./checkpoints/mae_pretrain_vit_base.pth"
+MODEL="mae_vit_base_patch16"
 IMAGE=""  # 이미지 경로 (비어있으면 랜덤 이미지 사용)
 MASK_RATIO=0.75
 OUTPUT="./test_reconstruction.png"

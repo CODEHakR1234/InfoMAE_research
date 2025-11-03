@@ -4,7 +4,18 @@
 체크포인트를 로드하고 이미지 복원 결과를 시각화합니다.
 """
 
+# PyTorch와 timm 0.3.2 호환성 패치 (torch._six 문제 해결)
+# 최신 PyTorch에서는 torch._six가 제거되었지만 timm 0.3.2는 이를 필요로 함
+import sys
+import collections.abc
+
+# torch._six 모듈이 없는 경우 패치 적용 (timm import 전에 필수)
 import torch
+if not hasattr(torch, '_six'):
+    class _Six:
+        container_abcs = collections.abc
+    torch._six = _Six()
+
 import torchvision.transforms as transforms
 from PIL import Image
 import numpy as np
@@ -88,9 +99,9 @@ def run_one_image(img, model, mask_ratio=0.75):
 
 def main():
     parser = argparse.ArgumentParser(description='사전 학습된 MAE 모델 복원 테스트')
-    parser.add_argument('--model', default='mae_vit_large_patch16', type=str,
+    parser.add_argument('--model', default='mae_vit_base_patch16', type=str,
                         help='모델 아키텍처 (mae_vit_base_patch16, mae_vit_large_patch16, mae_vit_huge_patch14)')
-    parser.add_argument('--ckpt', default='./checkpoints/mae_pretrain_vit_large.pth', type=str,
+    parser.add_argument('--ckpt', default='./checkpoints/mae_pretrain_vit_base.pth', type=str,
                         help='체크포인트 경로')
     parser.add_argument('--image', type=str, default=None,
                         help='테스트할 이미지 경로 (없으면 랜덤 이미지 생성)')
