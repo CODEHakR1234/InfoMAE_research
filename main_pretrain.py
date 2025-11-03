@@ -24,12 +24,25 @@ import torchvision.datasets as datasets
 
 import timm
 
-# timm 1.0.x 호환
-try:
-    import timm.optim.optim_factory as optim_factory
-except ImportError:
-    # timm 1.0.x에서는 optim_factory가 변경되었을 수 있음
-    optim_factory = None
+# timm 1.0.x 호환: add_weight_decay 함수 직접 구현
+def add_weight_decay(model, weight_decay=1e-5, skip_list=()):
+    """
+    timm.optim.optim_factory.add_weight_decay의 대체 구현
+    bias와 norm layer (1D 파라미터)에는 weight decay를 적용하지 않음
+    """
+    decay = []
+    no_decay = []
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if len(param.shape) == 1 or name.endswith(".bias") or name in skip_list:
+            no_decay.append(param)
+        else:
+            decay.append(param)
+    return [
+        {'params': no_decay, 'weight_decay': 0.},
+        {'params': decay, 'weight_decay': weight_decay}
+    ]
 
 import util.misc as misc
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
@@ -182,7 +195,7 @@ def main(args):
         model_without_ddp = model.module
     
     # following timm: set wd as 0 for bias and norm layers
-    param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
+    param_groups = add_weight_decay(model_without_ddp, args.weight_decay)
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
     print(optimizer)
     loss_scaler = NativeScaler()
