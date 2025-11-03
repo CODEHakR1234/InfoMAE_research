@@ -44,8 +44,23 @@ def prepare_model(chkpt_dir, arch='mae_vit_base_patch16', device='cpu'):
     print(f"모델 로드 상태:")
     print(f"  Missing keys: {len(msg.missing_keys)}")
     print(f"  Unexpected keys: {len(msg.unexpected_keys)}")
-    if msg.missing_keys:
-        print(f"  Missing: {msg.missing_keys[:5]}..." if len(msg.missing_keys) > 5 else f"  Missing: {msg.missing_keys}")
+    
+    # Missing keys가 decoder 관련인지 확인
+    decoder_keys = [k for k in msg.missing_keys if 'decoder' in k or 'mask_token' in k]
+    encoder_keys = [k for k in msg.missing_keys if 'decoder' not in k and 'mask_token' not in k]
+    
+    if decoder_keys:
+        print(f"  Decoder 관련 missing keys: {len(decoder_keys)}개 (정상 - pretrained checkpoint는 encoder만 포함)")
+        print(f"    예: {decoder_keys[:3]}...")
+    if encoder_keys:
+        print(f"  경고: Encoder 관련 missing keys: {len(encoder_keys)}개")
+        print(f"    예: {encoder_keys[:3]}...")
+    
+    # Decoder가 초기화되지 않았을 수 있으므로 확인
+    if len(decoder_keys) > 0:
+        print(f"\n  참고: MAE pretrained checkpoint는 encoder만 포함합니다.")
+        print(f"  Decoder는 random initialization으로 사용됩니다.")
+        print(f"  복원 품질은 decoder가 학습되지 않아 제한적일 수 있습니다.")
     
     model.to(device)
     model.eval()
@@ -72,6 +87,7 @@ def run_one_image(img, model, mask_ratio=0.75, device='cpu'):
     # forward pass
     with torch.no_grad():
         loss, y, mask = model(x, mask_ratio=mask_ratio)
+        print(f"  복원 손실 (loss): {loss.item():.4f}")
         
         # y는 [N, L, p*p*3] 형태의 patchified 예측
         # unpatchify를 사용하여 이미지로 복원
