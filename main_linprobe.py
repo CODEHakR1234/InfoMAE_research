@@ -18,7 +18,16 @@ import time
 from pathlib import Path
 
 # timm 0.3.2와 최신 PyTorch 호환성 패치 (torch._six 문제 해결)
+import sys
+import types
 import collections.abc
+
+# torch._six 모듈을 sys.modules에 등록 (timm이 from torch._six import 할 수 있도록)
+if 'torch._six' not in sys.modules:
+    _six_module = types.ModuleType('torch._six')
+    _six_module.container_abcs = collections.abc
+    sys.modules['torch._six'] = _six_module
+
 import torch
 if not hasattr(torch, '_six'):
     class _Six:
