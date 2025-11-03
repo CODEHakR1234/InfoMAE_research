@@ -17,7 +17,7 @@ import random
 import models_mae
 
 
-def prepare_model(chkpt_dir, arch='mae_vit_large_patch16'):
+def prepare_model(chkpt_dir, arch='mae_vit_base_patch16', device='cpu'):
     """
     사전 학습된 모델 준비
     """
@@ -26,60 +26,80 @@ def prepare_model(chkpt_dir, arch='mae_vit_large_patch16'):
     
     # 체크포인트 로드
     checkpoint = torch.load(chkpt_dir, map_location='cpu')
-    print(f"체크포인트 키: {checkpoint.keys()}")
+    print(f"체크포인트 키: {list(checkpoint.keys())}")
     
     # 모델 가중치 로드
     if 'model' in checkpoint:
-        msg = model.load_state_dict(checkpoint['model'], strict=False)
+        checkpoint_model = checkpoint['model']
+        print(f"체크포인트 모델 키 수: {len(checkpoint_model.keys())}")
+        msg = model.load_state_dict(checkpoint_model, strict=False)
+    elif 'state_dict' in checkpoint:
+        checkpoint_model = checkpoint['state_dict']
+        print(f"체크포인트 state_dict 키 수: {len(checkpoint_model.keys())}")
+        msg = model.load_state_dict(checkpoint_model, strict=False)
     else:
+        print(f"체크포인트 직접 키 수: {len(checkpoint.keys())}")
         msg = model.load_state_dict(checkpoint, strict=False)
     
-    print(f"모델 로드 상태: {msg}")
+    print(f"모델 로드 상태:")
+    print(f"  Missing keys: {len(msg.missing_keys)}")
+    print(f"  Unexpected keys: {len(msg.unexpected_keys)}")
+    if msg.missing_keys:
+        print(f"  Missing: {msg.missing_keys[:5]}..." if len(msg.missing_keys) > 5 else f"  Missing: {msg.missing_keys}")
+    
+    model.to(device)
+    model.eval()
     
     return model
 
 
-def run_one_image(img, model, mask_ratio=0.75):
+def run_one_image(img, model, mask_ratio=0.75, device='cpu'):
     """
     단일 이미지에 대해 MAE 복원 실행
     """
-    x = torch.tensor(img)
-
-    # 모델을 평가 모드로
-    model.eval()
+    # 이미지가 이미 텐서인 경우
+    if isinstance(img, torch.Tensor):
+        x = img.clone()
+    else:
+        x = torch.tensor(img)
     
-    # 마스킹과 복원 실행
+    # 배치 차원 추가 및 device로 이동
+    if x.dim() == 3:
+        x = x.unsqueeze(0)  # [C, H, W] -> [1, C, H, W]
+    
+    x = x.to(device)
+    
+    # forward pass
     with torch.no_grad():
-        # 이미지 정규화
-        x = x.unsqueeze(0)  # 배치 차원 추가
+        loss, y, mask = model(x, mask_ratio=mask_ratio)
         
-        # forward pass
-        loss, y, mask = model(x.float(), mask_ratio=mask_ratio)
-        
-        y = model.unpatchify(y)
-        y = torch.einsum('nchw->nhwc', y).detach().cpu()
+        # y는 [N, L, p*p*3] 형태의 patchified 예측
+        # unpatchify를 사용하여 이미지로 복원
+        y = model.unpatchify(y)  # [N, 3, H, W]
+        y = torch.einsum('nchw->nhwc', y).detach().cpu()  # [N, H, W, C]
 
-        # 마스크 시각화
+        # 마스크를 이미지 형태로 변환
         mask = mask.detach()
-        mask = mask.unsqueeze(-1).repeat(1, 1, model.patch_embed.patch_size[0]**2 *3)  # (N, H*W, p*p*3)
-        mask = model.unpatchify(mask)  # 1 is removing, 0 is keeping
-        mask = torch.einsum('nchw->nhwc', mask).detach().cpu()
-        x = torch.einsum('nchw->nhwc', x)
+        mask = mask.unsqueeze(-1).repeat(1, 1, model.patch_embed.patch_size[0]**2 * 3)  # (N, H*W, p*p*3)
+        mask = model.unpatchify(mask)  # [N, 3, H, W] - 1 is removing, 0 is keeping
+        mask = torch.einsum('nchw->nhwc', mask).detach().cpu()  # [N, H, W, C]
+        
+        # 원본 이미지도 HWC 형태로 변환
+        x = torch.einsum('nchw->nhwc', x.detach().cpu())  # [N, H, W, C]
 
-        # 이미지 정규화 해제
-        # MAE는 정규화된 픽셀을 사용하므로 원본과 비교 가능
+        # 이미지 정규화 해제 (ImageNet normalization)
         mean = torch.tensor([0.485, 0.456, 0.406])
         std = torch.tensor([0.229, 0.224, 0.225])
         
-        # 복원 결과
+        # 복원 결과 정규화 해제
         y = y * std + mean
         y = torch.clip(y, 0, 1)
         
-        # 원본 이미지
+        # 원본 이미지 정규화 해제
         x = x * std + mean
         x = torch.clip(x, 0, 1)
 
-        # 마스크된 이미지
+        # 마스크된 이미지 (mask가 1인 부분은 제거됨)
         im_masked = x * (1 - mask)
 
         # 복원된 이미지와 마스크된 부분 결합
@@ -95,13 +115,25 @@ def main():
     parser.add_argument('--ckpt', default='./checkpoints/mae_pretrain_vit_base.pth', type=str,
                         help='체크포인트 경로')
     parser.add_argument('--image', type=str, default=None,
-                        help='테스트할 이미지 경로 (없으면 랜덤 이미지 생성)')
+                        help='테스트할 이미지 경로 (없으면 데이터셋에서 선택)')
+    parser.add_argument('--data_path', type=str, default='./data/imagenet100',
+                        help='데이터셋 경로 (ImageFolder 형식)')
+    parser.add_argument('--split', type=str, default='val', choices=['train', 'val'],
+                        help='데이터셋 split (train 또는 val)')
     parser.add_argument('--mask_ratio', type=float, default=0.75,
                         help='마스킹 비율 (기본: 0.75)')
     parser.add_argument('--output', type=str, default='./test_output.png',
                         help='출력 이미지 경로')
+    parser.add_argument('--seed', type=int, default=None,
+                        help='랜덤 시드 (재현성을 위해)')
     
     args = parser.parse_args()
+    
+    # 랜덤 시드 설정
+    if args.seed is not None:
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
     
     print("=" * 60)
     print("MAE 사전 학습 모델 복원 테스트")
@@ -110,6 +142,10 @@ def main():
     print(f"체크포인트: {args.ckpt}")
     print(f"마스킹 비율: {args.mask_ratio}")
     print()
+    
+    # Device 설정
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Device: {device}")
     
     # 체크포인트 확인
     if not Path(args.ckpt).exists():
@@ -120,22 +156,51 @@ def main():
     # 모델 로드
     print("모델 로드 중...")
     try:
-        model = prepare_model(args.ckpt, args.model)
+        model = prepare_model(args.ckpt, args.model, device=device)
         print("✓ 모델 로드 완료")
+        print(f"모델 파라미터 수: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
     except Exception as e:
         print(f"오류: 모델 로드 실패: {e}")
+        import traceback
+        traceback.print_exc()
         return 1
     
     # 이미지 준비
     print("\n이미지 준비 중...")
+    class_name = None
     if args.image and Path(args.image).exists():
         # 사용자 제공 이미지 사용
+        print(f"사용자 제공 이미지 사용: {args.image}")
         img = Image.open(args.image).convert('RGB')
     else:
-        # 랜덤 이미지 생성 (테스트용)
-        print("랜덤 이미지 생성 중...")
-        img = np.random.rand(224, 224, 3) * 255
-        img = Image.fromarray(img.astype(np.uint8))
+        # 데이터셋에서 이미지 선택
+        dataset_path = Path(args.data_path) / args.split
+        if not dataset_path.exists():
+            print(f"오류: 데이터셋 경로를 찾을 수 없습니다: {dataset_path}")
+            print("ImageNet-100 데이터셋을 다운로드하세요: bash download_imagenet100.sh")
+            print(f"또는 --image 옵션으로 직접 이미지 경로를 지정하세요.")
+            return 1
+        
+        print(f"데이터셋에서 이미지 선택: {dataset_path}")
+        
+        # ImageFolder 데이터셋 로드 (전처리 없이)
+        dataset = ImageFolder(str(dataset_path), transform=None)
+        
+        if len(dataset) == 0:
+            print(f"오류: 데이터셋이 비어있습니다: {dataset_path}")
+            return 1
+        
+        # 랜덤하게 하나 선택
+        idx = random.randint(0, len(dataset) - 1)
+        img, label = dataset[idx]
+        class_name = dataset.classes[label]
+        
+        print(f"선택된 이미지: 인덱스 {idx}/{len(dataset)-1}")
+        print(f"클래스: {class_name} (라벨: {label})")
+        
+        # PIL Image로 변환 (이미 PIL Image일 수도 있음)
+        if not isinstance(img, Image.Image):
+            img = Image.fromarray(np.array(img))
     
     # 이미지 전처리
     transform = transforms.Compose([
@@ -152,7 +217,7 @@ def main():
     # 복원 실행
     print("\n복원 실행 중...")
     try:
-        x, y, im_masked, im_paste, mask = run_one_image(img_tensor, model, mask_ratio=args.mask_ratio)
+        x, y, im_masked, im_paste, mask = run_one_image(img_tensor, model, mask_ratio=args.mask_ratio, device=device)
         print("✓ 복원 완료")
     except Exception as e:
         print(f"오류: 복원 실패: {e}")
@@ -162,24 +227,27 @@ def main():
     
     # 결과 시각화
     print("\n결과 시각화 중...")
-    fig, axes = plt.subplots(2, 2, figsize=(10, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(12, 12))
+    
+    title_prefix = f"클래스: {class_name} - " if class_name else ""
     
     axes[0, 0].imshow(x)
-    axes[0, 0].set_title('원본 이미지', fontsize=12)
+    axes[0, 0].set_title(f'{title_prefix}원본 이미지', fontsize=12, fontweight='bold')
     axes[0, 0].axis('off')
     
     axes[0, 1].imshow(im_masked)
-    axes[0, 1].set_title(f'마스크된 이미지 ({args.mask_ratio*100:.0f}% 제거)', fontsize=12)
+    axes[0, 1].set_title(f'마스크된 이미지 ({args.mask_ratio*100:.0f}% 제거)', fontsize=12, fontweight='bold')
     axes[0, 1].axis('off')
     
     axes[1, 0].imshow(y)
-    axes[1, 0].set_title('복원된 이미지', fontsize=12)
+    axes[1, 0].set_title('복원된 이미지', fontsize=12, fontweight='bold')
     axes[1, 0].axis('off')
     
     axes[1, 1].imshow(im_paste)
-    axes[1, 1].set_title('복원 결과 결합', fontsize=12)
+    axes[1, 1].set_title('복원 결과 결합', fontsize=12, fontweight='bold')
     axes[1, 1].axis('off')
     
+    plt.suptitle('MAE 복원 결과', fontsize=14, fontweight='bold', y=0.995)
     plt.tight_layout()
     plt.savefig(args.output, dpi=150, bbox_inches='tight')
     print(f"✓ 결과 저장: {args.output}")
@@ -187,6 +255,8 @@ def main():
     print("\n" + "=" * 60)
     print("테스트 완료!")
     print("=" * 60)
+    if class_name:
+        print(f"테스트 클래스: {class_name}")
     print(f"결과 이미지를 확인하세요: {args.output}")
     
     return 0
