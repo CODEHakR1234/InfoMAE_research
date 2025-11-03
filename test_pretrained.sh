@@ -8,7 +8,9 @@ cd "$SCRIPT_DIR"
 
 CKPT="./checkpoints/mae_pretrain_vit_base.pth"
 MODEL="mae_vit_base_patch16"
-IMAGE=""  # 이미지 경로 (비어있으면 랜덤 이미지 사용)
+DATA_PATH="./data/imagenet100"
+SPLIT="val"  # train 또는 val
+IMAGE=""  # 이미지 경로 (비어있으면 데이터셋에서 선택)
 MASK_RATIO=0.75
 OUTPUT="./test_reconstruction.png"
 
@@ -33,10 +35,13 @@ if [ -n "$IMAGE" ] && [ -f "$IMAGE" ]; then
         --mask_ratio $MASK_RATIO \
         --output $OUTPUT
 else
-    echo "랜덤 이미지로 테스트합니다..."
+    echo "데이터셋에서 이미지를 선택합니다..."
+    echo "데이터셋 경로: $DATA_PATH/$SPLIT"
     python3 test_pretrained.py \
         --model $MODEL \
         --ckpt $CKPT \
+        --data_path "$DATA_PATH" \
+        --split "$SPLIT" \
         --mask_ratio $MASK_RATIO \
         --output $OUTPUT
 fi

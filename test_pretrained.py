@@ -24,8 +24,10 @@ if not hasattr(torch, '_six'):
     torch._six = _Six()
 
 import torchvision.transforms as transforms
+from torchvision.datasets import ImageFolder
 from PIL import Image
 import numpy as np
+import random
 
 # NumPy 1.24+ 호환성 패치 (np.float가 제거됨)
 if not hasattr(np, 'float'):
@@ -116,13 +118,25 @@ def main():
     parser.add_argument('--ckpt', default='./checkpoints/mae_pretrain_vit_base.pth', type=str,
                         help='체크포인트 경로')
     parser.add_argument('--image', type=str, default=None,
-                        help='테스트할 이미지 경로 (없으면 랜덤 이미지 생성)')
+                        help='테스트할 이미지 경로 (없으면 데이터셋에서 선택)')
+    parser.add_argument('--data_path', type=str, default='./data/imagenet100',
+                        help='데이터셋 경로 (ImageFolder 형식)')
+    parser.add_argument('--split', type=str, default='val', choices=['train', 'val'],
+                        help='데이터셋 split (train 또는 val)')
     parser.add_argument('--mask_ratio', type=float, default=0.75,
                         help='마스킹 비율 (기본: 0.75)')
     parser.add_argument('--output', type=str, default='./test_output.png',
                         help='출력 이미지 경로')
+    parser.add_argument('--seed', type=int, default=None,
+                        help='랜덤 시드 (재현성을 위해)')
     
     args = parser.parse_args()
+    
+    # 랜덤 시드 설정
+    if args.seed is not None:
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
     
     print("=" * 60)
     print("MAE 사전 학습 모델 복원 테스트")
@@ -145,18 +159,46 @@ def main():
         print("✓ 모델 로드 완료")
     except Exception as e:
         print(f"오류: 모델 로드 실패: {e}")
+        import traceback
+        traceback.print_exc()
         return 1
     
     # 이미지 준비
     print("\n이미지 준비 중...")
+    class_name = None
     if args.image and Path(args.image).exists():
         # 사용자 제공 이미지 사용
+        print(f"사용자 제공 이미지 사용: {args.image}")
         img = Image.open(args.image).convert('RGB')
     else:
-        # 랜덤 이미지 생성 (테스트용)
-        print("랜덤 이미지 생성 중...")
-        img = np.random.rand(224, 224, 3) * 255
-        img = Image.fromarray(img.astype(np.uint8))
+        # 데이터셋에서 이미지 선택
+        dataset_path = Path(args.data_path) / args.split
+        if not dataset_path.exists():
+            print(f"오류: 데이터셋 경로를 찾을 수 없습니다: {dataset_path}")
+            print("ImageNet-100 데이터셋을 다운로드하세요: bash download_imagenet100.sh")
+            print(f"또는 --image 옵션으로 직접 이미지 경로를 지정하세요.")
+            return 1
+        
+        print(f"데이터셋에서 이미지 선택: {dataset_path}")
+        
+        # ImageFolder 데이터셋 로드 (전처리 없이)
+        dataset = ImageFolder(str(dataset_path), transform=None)
+        
+        if len(dataset) == 0:
+            print(f"오류: 데이터셋이 비어있습니다: {dataset_path}")
+            return 1
+        
+        # 랜덤하게 하나 선택
+        idx = random.randint(0, len(dataset) - 1)
+        img, label = dataset[idx]
+        class_name = dataset.classes[label]
+        
+        print(f"선택된 이미지: 인덱스 {idx}/{len(dataset)-1}")
+        print(f"클래스: {class_name} (라벨: {label})")
+        
+        # PIL Image로 변환 (이미 PIL Image일 수도 있음)
+        if not isinstance(img, Image.Image):
+            img = Image.fromarray(np.array(img))
     
     # 이미지 전처리
     transform = transforms.Compose([
@@ -183,24 +225,27 @@ def main():
     
     # 결과 시각화
     print("\n결과 시각화 중...")
-    fig, axes = plt.subplots(2, 2, figsize=(10, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(12, 12))
+    
+    title_prefix = f"클래스: {class_name} - " if class_name else ""
     
     axes[0, 0].imshow(x)
-    axes[0, 0].set_title('원본 이미지', fontsize=12)
+    axes[0, 0].set_title(f'{title_prefix}원본 이미지', fontsize=12, fontweight='bold')
     axes[0, 0].axis('off')
     
     axes[0, 1].imshow(im_masked)
-    axes[0, 1].set_title(f'마스크된 이미지 ({args.mask_ratio*100:.0f}% 제거)', fontsize=12)
+    axes[0, 1].set_title(f'마스크된 이미지 ({args.mask_ratio*100:.0f}% 제거)', fontsize=12, fontweight='bold')
     axes[0, 1].axis('off')
     
     axes[1, 0].imshow(y)
-    axes[1, 0].set_title('복원된 이미지', fontsize=12)
+    axes[1, 0].set_title('복원된 이미지', fontsize=12, fontweight='bold')
     axes[1, 0].axis('off')
     
     axes[1, 1].imshow(im_paste)
-    axes[1, 1].set_title('복원 결과 결합', fontsize=12)
+    axes[1, 1].set_title('복원 결과 결합', fontsize=12, fontweight='bold')
     axes[1, 1].axis('off')
     
+    plt.suptitle('MAE 복원 결과', fontsize=14, fontweight='bold', y=0.995)
     plt.tight_layout()
     plt.savefig(args.output, dpi=150, bbox_inches='tight')
     print(f"✓ 결과 저장: {args.output}")
@@ -208,6 +253,8 @@ def main():
     print("\n" + "=" * 60)
     print("테스트 완료!")
     print("=" * 60)
+    if class_name:
+        print(f"테스트 클래스: {class_name}")
     print(f"결과 이미지를 확인하세요: {args.output}")
     
     return 0
