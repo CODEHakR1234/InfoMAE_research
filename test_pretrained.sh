@@ -2,7 +2,7 @@
 
 # 사전 학습된 MAE 모델 복원 테스트 스크립트
 
-# 스크립트 디렉토리로 이동
+# 스크립트가 있는 디렉토리로 이동
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 

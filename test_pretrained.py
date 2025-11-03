@@ -4,17 +4,19 @@
 체크포인트를 로드하고 이미지 복원 결과를 시각화합니다.
 """
 
-# PyTorch와 timm 0.3.2 호환성 패치 (torch._six 문제 해결)
-# 최신 PyTorch에서는 torch._six가 제거되었지만 timm 0.3.2는 이를 필요로 함
-import sys
+# timm 0.3.2와 최신 PyTorch 호환성 패치 (torch._six 문제 해결)
+# PyTorch 1.9+ 에서 torch._six가 제거되었지만 timm 0.3.2는 이를 필요로 함
 import collections.abc
 
-# torch._six 모듈이 없는 경우 패치 적용 (timm import 전에 필수)
-import torch
-if not hasattr(torch, '_six'):
-    class _Six:
-        container_abcs = collections.abc
-    torch._six = _Six()
+# torch._six 모듈이 없는 경우 패치 적용 (timm import 전에 필수!)
+try:
+    import torch
+    if not hasattr(torch, '_six'):
+        class _Six:
+            container_abcs = collections.abc
+        torch._six = _Six()
+except ImportError:
+    pass
 
 import torchvision.transforms as transforms
 from PIL import Image
