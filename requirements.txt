@@ -1,8 +1,8 @@
-# Python 3.12 / Linux / CUDA 12.8
-torch==2.6.*
-torchvision==0.20.*
-timm==1.0.21
-numpy<2
+# 최신 트랙: Python 3.11/3.12 + PyTorch 2.6 + timm 1.0.x
+torch>=2.6.0
+torchvision>=0.21.0
+timm>=1.0.0
+numpy>=1.24,<2.0
 Pillow>=10.0
 tensorboard
 datasets

@@ -24,8 +24,12 @@ import torchvision.datasets as datasets
 
 import timm
 
-assert timm.__version__ == "0.3.2"  # version check
-import timm.optim.optim_factory as optim_factory
+# timm 1.0.x 호환
+try:
+    import timm.optim.optim_factory as optim_factory
+except ImportError:
+    # timm 1.0.x에서는 optim_factory가 변경되었을 수 있음
+    optim_factory = None
 
 import util.misc as misc
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
