@@ -1,7 +1,7 @@
-# requirements.txt (원본 MAE 코드 호환)
-# PyTorch 1.x 버전 사용 (원본 코드와 호환)
-torch>=1.8.1,<2.0.0
-torchvision>=0.9.1,<0.16.0
+# requirements.txt (Python 3.12 호환)
+# PyTorch 2.0.x 사용 (Python 3.12는 PyTorch 1.x 미지원)
+torch>=2.0.0,<2.1.0
+torchvision>=0.15.0,<0.16.0
 timm==0.3.2
 numpy<1.24
 Pillow

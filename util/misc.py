@@ -18,7 +18,8 @@ from pathlib import Path
 
 import torch
 import torch.distributed as dist
-from torch._six import inf
+import math
+inf = float('inf')  # PyTorch 2.0+ 호환: torch._six.inf 대체
 
 
 class SmoothedValue(object):
