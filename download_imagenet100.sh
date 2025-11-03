@@ -26,6 +26,13 @@ fi
 
 echo ""
 echo "다운로드 시작..."
+echo "캐시 디렉토리는 자동으로 설정됩니다."
+echo ""
+
+# 현재 디렉토리 확인
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
+
 python3 download_imagenet100.py --target_dir "$TARGET_DIR" --method huggingface
 
 if [ $? -eq 0 ]; then

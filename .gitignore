@@ -42,6 +42,9 @@ imagenet100/
 *.jpg
 *.png
 
+# Hugging Face cache
+hf_cache/
+
 # Jupyter Notebook
 .ipynb_checkpoints
 *.ipynb

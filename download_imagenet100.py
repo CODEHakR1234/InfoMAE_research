@@ -11,9 +11,13 @@ from PIL import Image
 import json
 from tqdm import tqdm
 
-def download_from_huggingface(target_dir):
+def download_from_huggingface(target_dir, cache_dir=None):
     """
     Hugging Face Datasets를 통해 ImageNet-100 다운로드 및 저장
+    
+    Args:
+        target_dir: 데이터를 저장할 대상 디렉토리
+        cache_dir: Hugging Face 캐시 디렉토리 (None이면 자동 설정)
     """
     try:
         from datasets import load_dataset
@@ -34,10 +38,29 @@ def download_from_huggingface(target_dir):
     target_dir = Path(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
     
+    # 캐시 디렉토리 설정
+    if cache_dir is None:
+        # 캐시 디렉토리를 대상 디렉토리와 같은 위치로 설정 (충분한 공간 보장)
+        cache_dir = target_dir.parent / "hf_cache"
+    else:
+        cache_dir = Path(cache_dir)
+    
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Hugging Face 환경 변수 설정 (기본 캐시 사용 방지)
+    import os
+    os.environ['HF_HOME'] = str(cache_dir.parent)
+    os.environ['HF_DATASETS_CACHE'] = str(cache_dir)
+    
+    print(f"대상 디렉토리: {target_dir}")
+    print(f"캐시 디렉토리: {cache_dir}")
+    print(f"Hugging Face 환경 변수 설정됨")
+    
     # Hugging Face에서 ImageNet-100 로드
     try:
         print("\n데이터셋 로드 중...")
-        dataset = load_dataset("clane9/imagenet-100", cache_dir=None)
+        # cache_dir을 명시적으로 지정하여 충분한 공간이 있는 위치 사용
+        dataset = load_dataset("clane9/imagenet-100", cache_dir=str(cache_dir))
         
         train_dataset = dataset.get('train', None)
         val_dataset = dataset.get('validation', None)
@@ -128,8 +151,32 @@ def download_from_huggingface(target_dir):
         if val_dataset:
             print(f"  Val 이미지: {len(val_dataset)}개")
         
+        # 캐시 정리 옵션 제안
+        print(f"\n참고: Hugging Face 캐시는 {cache_dir}에 저장되었습니다.")
+        print(f"필요시 캐시를 삭제하여 공간을 확보할 수 있습니다: rm -rf {cache_dir}")
+        
         return True
         
+    except OSError as e:
+        if "No space left on device" in str(e):
+            print(f"\n디스크 공간 부족 오류 발생!")
+            print(f"캐시 디렉토리: {cache_dir}")
+            print(f"\n해결 방법:")
+            print(f"1. 다른 위치에 캐시 저장:")
+            print(f"   python3 download_imagenet100.py --target_dir ./data/imagenet100 --cache_dir /path/to/large/disk/hf_cache")
+            print(f"2. 기존 Hugging Face 캐시 정리:")
+            print(f"   rm -rf ~/.cache/huggingface/datasets")
+            print(f"3. ImageNet-1K에서 ImageNet-100 추출 (이미 ImageNet-1K가 있는 경우)")
+            return False
+        else:
+            print(f"\n다운로드 중 오류 발생: {e}")
+            import traceback
+            traceback.print_exc()
+            print("\n대안:")
+            print("1. 네트워크 연결 확인")
+            print("2. ImageNet-1K에서 ImageNet-100을 추출: prepare_imagenet100.py 사용")
+            print("3. GitHub 저장소의 스크립트 사용")
+            return False
     except Exception as e:
         print(f"\n다운로드 중 오류 발생: {e}")
         import traceback
@@ -160,6 +207,8 @@ def main():
     parser = argparse.ArgumentParser(description='ImageNet-100 다운로드')
     parser.add_argument('--target_dir', type=str, default='./data/imagenet100',
                         help='ImageNet-100을 저장할 경로 (기본: ./data/imagenet100)')
+    parser.add_argument('--cache_dir', type=str, default=None,
+                        help='Hugging Face 캐시 디렉토리 (기본: 대상 디렉토리와 같은 위치의 hf_cache)')
     parser.add_argument('--method', type=str, choices=['huggingface', 'github'],
                         default='huggingface', help='다운로드 방법 선택')
     
@@ -169,11 +218,13 @@ def main():
     print("ImageNet-100 다운로드")
     print("=" * 60)
     print(f"대상 경로: {args.target_dir}")
+    if args.cache_dir:
+        print(f"캐시 경로: {args.cache_dir}")
     print(f"방법: {args.method}")
     print()
     
     if args.method == 'huggingface':
-        if download_from_huggingface(args.target_dir):
+        if download_from_huggingface(args.target_dir, args.cache_dir):
             print("\n" + "=" * 60)
             print("다운로드 완료!")
             print("=" * 60)
