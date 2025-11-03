@@ -1,10 +1,10 @@
-torch>=1.8.1
-torchvision>=0.9.1
-timm==0.3.2
-numpy  # NumPy 1.24+ 호환 패치 적용됨
-Pillow
+# requirements.txt (Modern-stable)
+torch==2.6.*
+torchvision==0.20.*
+timm==1.0.21
+numpy<2
+Pillow>=10.0
 tensorboard
 datasets
 tqdm
 matplotlib
-
