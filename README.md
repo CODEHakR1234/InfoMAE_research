@@ -23,9 +23,34 @@ This is a PyTorch/GPU re-implementation of the paper [Masked Autoencoders Are Sc
 
 ### Catalog
 
-- [x] Visualization demo
 - [x] Pre-trained checkpoints + fine-tuning code
 - [x] Pre-training code
+- [x] ImageNet-100 support with automated download script
+- [x] Environment setup scripts
+- [x] Fine-tuning guide for ImageNet-100
+
+### Quick Start (ImageNet-100)
+
+This repository includes scripts to easily fine-tune MAE on ImageNet-100:
+
+```bash
+# 1. Setup environment
+bash setup_env.sh
+
+# 2. Download checkpoints
+bash download_checkpoints.sh
+
+# 3. Download ImageNet-100
+bash download_imagenet100.sh
+
+# 4. Fine-tune
+bash run_finetune_single_gpu.sh
+
+# 5. Evaluate
+bash run_eval.sh
+```
+
+See [FINETUNE_GUIDE.md](FINETUNE_GUIDE.md) for detailed instructions.
 
 ### Visualization demo
 
@@ -57,7 +82,7 @@ The following table provides the pre-trained checkpoints used in the paper, conv
 </tr>
 </tbody></table>
 
-The fine-tuning instruction is in [FINETUNE.md](FINETUNE.md).
+The fine-tuning instruction for ImageNet-100 is in [FINETUNE_GUIDE.md](FINETUNE_GUIDE.md).
 
 By fine-tuning these pre-trained models, we rank #1 in these classification tasks (detailed in the paper):
 <table><tbody>
