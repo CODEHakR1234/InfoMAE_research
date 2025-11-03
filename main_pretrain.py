@@ -88,6 +88,8 @@ def get_args_parser():
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--resume', default='',
                         help='resume from checkpoint')
+    parser.add_argument('--pretrained_encoder', default='',
+                        help='load pretrained encoder checkpoint (only encoder weights, decoder will be randomly initialized)')
 
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
@@ -185,6 +187,7 @@ def main(args):
     print(optimizer)
     loss_scaler = NativeScaler()
 
+    # Load pretrained encoder (if specified) or resume from checkpoint
     misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
 
     print(f"Start training for {args.epochs} epochs")

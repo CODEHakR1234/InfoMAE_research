@@ -328,6 +328,33 @@ def load_model(args, model_without_ddp, optimizer, loss_scaler):
             if 'scaler' in checkpoint:
                 loss_scaler.load_state_dict(checkpoint['scaler'])
             print("With optim & sched!")
+    
+    # Load pretrained encoder only (for decoder training)
+    if hasattr(args, 'pretrained_encoder') and args.pretrained_encoder:
+        checkpoint = torch.load(args.pretrained_encoder, map_location='cpu')
+        
+        # Extract model weights
+        if 'model' in checkpoint:
+            checkpoint_model = checkpoint['model']
+        elif 'state_dict' in checkpoint:
+            checkpoint_model = checkpoint['state_dict']
+        else:
+            checkpoint_model = checkpoint
+        
+        # Filter to only encoder weights (exclude decoder and mask_token)
+        encoder_state_dict = {}
+        for k, v in checkpoint_model.items():
+            # Skip decoder weights
+            if 'decoder' not in k and 'mask_token' not in k:
+                encoder_state_dict[k] = v
+        
+        # Load only encoder weights
+        msg = model_without_ddp.load_state_dict(encoder_state_dict, strict=False)
+        print(f"Loaded pretrained encoder from: {args.pretrained_encoder}")
+        print(f"  Encoder keys loaded: {len(encoder_state_dict)}")
+        print(f"  Missing keys (decoder): {len([k for k in msg.missing_keys if 'decoder' in k or 'mask_token' in k])}")
+        print(f"  Unexpected keys: {len(msg.unexpected_keys)}")
+        print(f"  Note: Decoder will be trained from scratch")
 
 
 def all_reduce_mean(x):

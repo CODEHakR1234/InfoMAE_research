@@ -58,9 +58,18 @@ def prepare_model(chkpt_dir, arch='mae_vit_base_patch16', device='cpu'):
     
     # Decoder가 초기화되지 않았을 수 있으므로 확인
     if len(decoder_keys) > 0:
-        print(f"\n  참고: MAE pretrained checkpoint는 encoder만 포함합니다.")
+        print(f"\n  ⚠️  중요: MAE pretrained checkpoint는 encoder만 포함합니다.")
         print(f"  Decoder는 random initialization으로 사용됩니다.")
-        print(f"  복원 품질은 decoder가 학습되지 않아 제한적일 수 있습니다.")
+        print(f"  → 복원 품질이 나쁠 수 있습니다 (decoder가 학습되지 않음).")
+        print(f"  → 좋은 복원 결과를 원한다면 pretraining을 완료한 전체 모델을 사용하세요.")
+    
+    # Load된 encoder 파라미터 수 확인
+    loaded_params = sum(p.numel() for name, p in model.named_parameters() 
+                       if any(key in name for key in checkpoint_model.keys()))
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"\n  파라미터 로드 상태:")
+    print(f"    로드된 파라미터: {loaded_params / 1e6:.2f}M / {total_params / 1e6:.2f}M")
+    print(f"    로드 비율: {loaded_params / total_params * 100:.1f}%")
     
     model.to(device)
     model.eval()
@@ -87,7 +96,10 @@ def run_one_image(img, model, mask_ratio=0.75, device='cpu'):
     # forward pass
     with torch.no_grad():
         loss, y, mask = model(x, mask_ratio=mask_ratio)
-        print(f"  복원 손실 (loss): {loss.item():.4f}")
+        loss_value = loss.item()
+        print(f"  복원 손실 (loss): {loss_value:.4f}")
+        print(f"  참고: 학습된 MAE의 loss는 보통 0.1~0.3 정도입니다.")
+        print(f"        현재 loss가 높다면 decoder가 학습되지 않았기 때문입니다.")
         
         # y는 [N, L, p*p*3] 형태의 patchified 예측
         # unpatchify를 사용하여 이미지로 복원
