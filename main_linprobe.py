@@ -13,6 +13,11 @@ import argparse
 import datetime
 import json
 import numpy as np
+
+# NumPy 1.24+ 호환성 패치 (np.float가 제거됨, timm 0.3.2 호환)
+if not hasattr(np, 'float'):
+    np.float = float
+
 import os
 import time
 from pathlib import Path

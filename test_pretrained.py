@@ -26,6 +26,11 @@ if not hasattr(torch, '_six'):
 import torchvision.transforms as transforms
 from PIL import Image
 import numpy as np
+
+# NumPy 1.24+ 호환성 패치 (np.float가 제거됨)
+if not hasattr(np, 'float'):
+    np.float = float  # timm 0.3.2 호환성
+
 import matplotlib.pyplot as plt
 import argparse
 from pathlib import Path

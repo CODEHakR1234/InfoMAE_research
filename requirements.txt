@@ -1,7 +1,7 @@
 torch>=1.8.1
 torchvision>=0.9.1
 timm==0.3.2
-numpy<1.24  # NumPy 1.24+ 에서 np.float가 제거됨 (timm 0.3.2 호환)
+numpy  # NumPy 1.24+ 호환 패치 적용됨
 Pillow
 tensorboard
 datasets

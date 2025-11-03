@@ -11,6 +11,11 @@
 
 from functools import partial
 
+# NumPy 1.24+ 호환성 패치 (np.float가 제거됨, timm 0.3.2 호환)
+import numpy as np
+if not hasattr(np, 'float'):
+    np.float = float
+
 # timm 0.3.2와 최신 PyTorch 호환성 패치 (torch._six 문제 해결)
 import sys
 import types
