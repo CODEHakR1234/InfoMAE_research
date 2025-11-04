@@ -110,6 +110,10 @@ def get_args_parser():
     parser.add_argument('--cache_precision', type=str, default='float32', choices=['float16', 'float32'],
                         help='Precision for epoch-level surprisal cache')
 
+    parser.add_argument('--read_only_cache', action='store_true',
+                        help='Use surprisal cache in read-only mode (no updates)')
+    parser.set_defaults(read_only_cache=False)
+
     # Optimizer parameters
     parser.add_argument('--weight_decay', type=float, default=0.05,
                         help='weight decay (default: 0.05)')

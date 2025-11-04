@@ -93,8 +93,8 @@ def train_one_epoch(model: torch.nn.Module,
 
         torch.cuda.synchronize()
 
-        # InfoMAE: Update surprisal cache
-        if surprisal is not None and surprisal_cache is not None and (data_iter_step + 1) % accum_iter == 0:
+        # InfoMAE: Update surprisal cache (only if not read-only mode)
+        if surprisal is not None and surprisal_cache is not None and (data_iter_step + 1) % accum_iter == 0 and not args.read_only_cache:
             surprisal_cache.update_surprisal(targets, surprisal.cpu())
 
         metric_logger.update(loss=loss_value)

@@ -320,7 +320,12 @@ def load_model(args, model_without_ddp, optimizer, loss_scaler):
                 args.resume, map_location='cpu', check_hash=True)
         else:
             checkpoint = torch.load(args.resume, map_location='cpu')
-        model_without_ddp.load_state_dict(checkpoint['model'])
+        msg = model_without_ddp.load_state_dict(checkpoint['model'], strict=False)
+        print(f"Model loaded with missing keys: {len(msg.missing_keys)}, unexpected keys: {len(msg.unexpected_keys)}")
+        if msg.missing_keys:
+            print(f"Missing keys (first 5): {msg.missing_keys[:5]}")
+        if msg.unexpected_keys:
+            print(f"Unexpected keys (first 5): {msg.unexpected_keys[:5]}")
         print("Resume checkpoint %s" % args.resume)
         if 'optimizer' in checkpoint and 'epoch' in checkpoint and not (hasattr(args, 'eval') and args.eval):
             optimizer.load_state_dict(checkpoint['optimizer'])
