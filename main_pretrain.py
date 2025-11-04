@@ -16,15 +16,6 @@ import os
 import time
 from pathlib import Path
 
-# PyTorch 2.6+ compatibility patch for timm
-if not hasattr(torch, '_six'):
-    import collections.abc as container_abcs
-    class _Six:
-        container_abcs = container_abcs
-    torch._six = _Six()
-    import sys
-    sys.modules['torch._six'] = torch._six
-
 import torch
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
