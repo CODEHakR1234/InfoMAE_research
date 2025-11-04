@@ -49,13 +49,15 @@ class EpochSurprisalCache:
         except Exception as e:
             print(f"Warning: Failed to save cache: {e}")
 
-    def update_surprisal(self, image_paths, surprisal_values):
+    def update_surprisal(self, image_paths, surprisal_values, mask=None):
         """
         Update surprisal values for given images
 
         Args:
             image_paths: List of image paths or indices
             surprisal_values: Tensor of shape (batch_size, num_patches)
+            mask: Tensor of shape (batch_size, num_patches), 1 for masked, 0 for visible
+                 If None, update all patches
         """
         for i, img_path in enumerate(image_paths):
             # Convert tensor path to string if needed
@@ -66,7 +68,22 @@ class EpochSurprisalCache:
             else:
                 img_path = str(img_path)
 
-            self.cache[img_path] = surprisal_values[i].detach().cpu().to(self.dtype)
+            current_surprisal = surprisal_values[i].detach().cpu().to(self.dtype)
+
+            if img_path in self.cache:
+                # Existing image: update only masked patches, keep visible patches
+                cached_surprisal = self.cache[img_path]
+                if mask is not None:
+                    mask_i = mask[i].detach().cpu().to(self.dtype)
+                    # Update only masked patches (mask=1), keep visible patches (mask=0)
+                    updated_surprisal = cached_surprisal * (1 - mask_i) + current_surprisal * mask_i
+                    self.cache[img_path] = updated_surprisal
+                else:
+                    # No mask provided, update all
+                    self.cache[img_path] = current_surprisal
+            else:
+                # New image: store current surprisal
+                self.cache[img_path] = current_surprisal
 
     def get_surprisal(self, image_paths):
         """

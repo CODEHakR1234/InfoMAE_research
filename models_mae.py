@@ -303,7 +303,9 @@ class MaskedAutoencoderViT(nn.Module):
         loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
 
         # Calculate surprisal (reconstruction loss per patch)
+        # Only masked patches have meaningful surprisal, visible patches should be 0
         surprisal = loss.clone().detach()  # [N, L]
+        surprisal = surprisal * mask  # Zero out surprisal for visible patches (mask=0)
 
         # Reconstruction loss (mean loss on removed patches)
         recon_loss = (loss * mask).sum() / mask.sum()
