@@ -51,6 +51,7 @@ python main_pretrain.py \
     --freeze_encoder \
     --use_epoch_cache \
     --cache_precision float32 \
+    --num_workers=4 \
     --resume ./checkpoints/mae_pretrain_vit_base.pth
 
 # Stage 0 완료 후 중간 테스트 실행
@@ -94,6 +95,7 @@ python main_pretrain.py \
     --mask_ratio 0.75 \
     --use_surprisal_attention \
     --surprisal_lambda 1.0 \
+    --num_workers=4 \
     --resume ${OUTPUT_DIR}/stage0/checkpoint-49.pth
 
 # Stage 1 완료 후 중간 테스트 실행
@@ -137,6 +139,7 @@ python main_pretrain.py \
     --adaptive_alpha 0.0 \
     --adaptive_gamma 1.0 \
     --beta_ib 0.02 \
+    --num_workers=4 \
     --resume ${OUTPUT_DIR}/stage0/checkpoint-49.pth
 
 # Stage 2 완료 후 중간 테스트 실행
@@ -180,6 +183,7 @@ python main_pretrain.py \
     --adaptive_alpha 0.0 \
     --adaptive_gamma 1.0 \
     --beta_ib 0.02 \
+    --num_workers=4 \
     --resume ${OUTPUT_DIR}/stage0/checkpoint-49.pth
 
 # Stage 3 완료 후 최종 테스트 실행
