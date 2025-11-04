@@ -135,7 +135,7 @@ def calculate_surprisal(reconstruction_loss, mask, num_patches=196):
     surprisal = torch.zeros_like(reconstruction_loss)
 
     # Calculate surprisal only for masked (invisible) patches
-    masked_patches = (mask == 0)  # 0 means masked
+    masked_patches = (mask == 1)  # 1 means masked (removed)
 
     if masked_patches.any():
         # Surprisal is based on reconstruction error for masked patches

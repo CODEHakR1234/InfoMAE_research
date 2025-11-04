@@ -12,7 +12,25 @@ OUTPUT_DIR="./output_infomae"
 MODEL="mae_vit_base_patch16"
 SHARED_CACHE_DIR="./shared_surprisal_cache"
 
-# Stage 0: Baseline (Encoder Freeze - Decoder Warmup)
+# 인자 파싱
+STAGE=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --stage)
+            STAGE="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [--stage STAGE_NUM]"
+            echo "  STAGE_NUM: 0,1,2,3 or empty for all stages"
+            exit 1
+            ;;
+    esac
+done
+
+# Stage 0 실행 조건 확인
+if [ -z "$STAGE" ] || [ "$STAGE" = "0" ]; then
 echo "========================================"
 echo "Stage 0: Baseline (Encoder Freeze - Decoder Warmup)"
 echo "========================================"
@@ -47,8 +65,10 @@ if [ -f "${OUTPUT_DIR}/stage0/surprisal_cache/surprisal_cache.pkl" ]; then
     cp ${OUTPUT_DIR}/stage0/surprisal_cache/surprisal_cache.pkl ${SHARED_CACHE_DIR}/
     echo "✓ Stage 0 surprisal cache를 공유 디렉토리로 복사"
 fi
+fi  # Stage 0 종료
 
 # Stage 1: SWA 실험 (Stage 0 cache 기반)
+if [ -z "$STAGE" ] || [ "$STAGE" = "1" ]; then
 echo "========================================"
 echo "Stage 1: SWA 실험 (Stage 0 cache 기반)"
 echo "========================================"
@@ -82,8 +102,10 @@ if [ -f "${OUTPUT_DIR}/stage1/checkpoint-99.pth" ]; then
     ./test_pretrained.sh --ckpt ${OUTPUT_DIR}/stage1/checkpoint-99.pth --output ${OUTPUT_DIR}/stage1/test_stage1.png
     echo "✓ Stage 1 중간 결과 저장: ${OUTPUT_DIR}/stage1/test_stage1.png"
 fi
+fi  # Stage 1 종료
 
 # Stage 2: Adaptive 실험 (Stage 0 cache 기반)
+if [ -z "$STAGE" ] || [ "$STAGE" = "2" ]; then
 echo "========================================"
 echo "Stage 2: Adaptive 실험 (Stage 0 cache 기반)"
 echo "========================================"
@@ -123,8 +145,10 @@ if [ -f "${OUTPUT_DIR}/stage2/checkpoint-99.pth" ]; then
     ./test_pretrained.sh --ckpt ${OUTPUT_DIR}/stage2/checkpoint-99.pth --output ${OUTPUT_DIR}/stage2/test_stage2.png
     echo "✓ Stage 2 중간 결과 저장: ${OUTPUT_DIR}/stage2/test_stage2.png"
 fi
+fi  # Stage 2 종료
 
 # Stage 3: Full 실험 (Stage 0 cache 기반)
+if [ -z "$STAGE" ] || [ "$STAGE" = "3" ]; then
 echo "========================================"
 echo "Stage 3: Full 실험 (Stage 0 cache 기반)"
 echo "========================================"
@@ -186,3 +210,4 @@ echo "  tensorboard --logdir ${OUTPUT_DIR}/stage1"
 echo "  tensorboard --logdir ${OUTPUT_DIR}/stage2"
 echo "  tensorboard --logdir ${OUTPUT_DIR}/stage3"
 echo "========================================"
+fi  # Stage 3 종료
