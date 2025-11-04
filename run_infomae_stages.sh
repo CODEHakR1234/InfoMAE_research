@@ -43,20 +43,22 @@ python main_pretrain.py \
     --log_dir ${OUTPUT_DIR}/stage0 \
     --model ${MODEL} \
     --batch_size 64 \
-    --epochs 20 \
-    --warmup_epochs 5 \
+    --epochs 50 \
+    --warmup_epochs 10 \
     --blr 1e-3 \
     --weight_decay 0.05 \
     --mask_ratio 0.75 \
     --freeze_encoder \
+    --use_epoch_cache \
+    --cache_precision float32 \
     --resume ./checkpoints/mae_pretrain_vit_base.pth
 
 # Stage 0 완료 후 중간 테스트 실행
 echo "========================================"
 echo "Stage 0 완료 - 중간 결과 테스트"
 echo "========================================"
-if [ -f "${OUTPUT_DIR}/stage0/checkpoint-19.pth" ]; then
-    ./test_pretrained.sh --ckpt ${OUTPUT_DIR}/stage0/checkpoint-19.pth --output ${OUTPUT_DIR}/stage0/test_stage0.png
+if [ -f "${OUTPUT_DIR}/stage0/checkpoint-49.pth" ]; then
+    ./test_pretrained.sh --ckpt ${OUTPUT_DIR}/stage0/checkpoint-49.pth --output ${OUTPUT_DIR}/stage0/test_stage0.png
     echo "✓ Stage 0 중간 결과 저장: ${OUTPUT_DIR}/stage0/test_stage0.png"
 fi
 
@@ -92,7 +94,7 @@ python main_pretrain.py \
     --mask_ratio 0.75 \
     --use_surprisal_attention \
     --surprisal_lambda 1.0 \
-    --resume ${OUTPUT_DIR}/stage0/checkpoint-19.pth
+    --resume ${OUTPUT_DIR}/stage0/checkpoint-49.pth
 
 # Stage 1 완료 후 중간 테스트 실행
 echo "========================================"
@@ -135,7 +137,7 @@ python main_pretrain.py \
     --adaptive_alpha 0.0 \
     --adaptive_gamma 1.0 \
     --beta_ib 0.02 \
-    --resume ${OUTPUT_DIR}/stage0/checkpoint-19.pth
+    --resume ${OUTPUT_DIR}/stage0/checkpoint-49.pth
 
 # Stage 2 완료 후 중간 테스트 실행
 echo "========================================"
@@ -178,7 +180,7 @@ python main_pretrain.py \
     --adaptive_alpha 0.0 \
     --adaptive_gamma 1.0 \
     --beta_ib 0.02 \
-    --resume ${OUTPUT_DIR}/stage0/checkpoint-19.pth
+    --resume ${OUTPUT_DIR}/stage0/checkpoint-49.pth
 
 # Stage 3 완료 후 최종 테스트 실행
 echo "========================================"
@@ -193,7 +195,7 @@ echo "========================================"
 echo "InfoMAE 단계별 훈련 및 테스트 완료!"
 echo ""
 echo "📁 Checkpoint 파일들:"
-echo "  Stage 0 (Warmup): ${OUTPUT_DIR}/stage0/checkpoint-19.pth"
+echo "  Stage 0 (Warmup): ${OUTPUT_DIR}/stage0/checkpoint-49.pth"
 echo "  Stage 1 (SWA): ${OUTPUT_DIR}/stage1/checkpoint-99.pth"
 echo "  Stage 2 (Adaptive): ${OUTPUT_DIR}/stage2/checkpoint-99.pth"
 echo "  Stage 3 (Full): ${OUTPUT_DIR}/stage3/checkpoint-99.pth"

@@ -223,9 +223,10 @@ def main(args):
 
     # InfoMAE initialization
     surprisal_cache = None
-    if args.adaptive_masking and args.use_epoch_cache:
-        surprisal_cache = EpochSurprisalCache(precision=args.cache_precision)
-        print(f"Initialized epoch-level surprisal cache")
+    if args.use_epoch_cache:
+        cache_dir = Path(args.output_dir) / 'surprisal_cache'
+        surprisal_cache = EpochSurprisalCache(cache_dir=str(cache_dir), precision=args.cache_precision)
+        print(f"Initialized epoch-level surprisal cache at {cache_dir}")
 
     # Freeze encoder if requested
     if args.freeze_encoder:
