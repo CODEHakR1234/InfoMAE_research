@@ -26,7 +26,8 @@ python main_pretrain.py \
     --weight_decay 0.05 \
     --mask_ratio 0.75 \
     --freeze_encoder \
-    --unfreeze_last_n_blocks 0
+    --unfreeze_last_n_blocks 0 \
+    --resume ./checkpoints/mae_pretrain_vit_base.pth
 
 # Stage 1: SWA 추가 (Surprisal-Weighted Attention)
 echo "========================================"
