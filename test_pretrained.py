@@ -15,6 +15,7 @@ from torchvision.datasets import ImageFolder
 import random
 
 import models_mae
+from util.infomae_utils import EpochSurprisalCache
 
 
 def prepare_model(chkpt_dir, arch='mae_vit_base_patch16', device='cpu'):
@@ -95,11 +96,25 @@ def run_one_image(img, model, mask_ratio=0.75, device='cpu'):
     
     # forward pass
     with torch.no_grad():
-        loss, y, mask = model(x, mask_ratio=mask_ratio)
+        # InfoMAE 모델인지 확인하여 적절한 forward 호출
+        if hasattr(model, 'forward') and 'beta_ib' in model.forward.__code__.co_varnames:
+            # InfoMAE 모델
+            loss, y, mask, surprisal = model(x, mask_ratio=mask_ratio, beta_ib=0.0)
+        else:
+            # Standard MAE 모델
+            loss, y, mask = model(x, mask_ratio=mask_ratio)
+            surprisal = None
+
         loss_value = loss.item()
         print(f"  복원 손실 (loss): {loss_value:.4f}")
         print(f"  참고: 학습된 MAE의 loss는 보통 0.1~0.3 정도입니다.")
         print(f"        현재 loss가 높다면 decoder가 학습되지 않았기 때문입니다.")
+
+        if surprisal is not None:
+            avg_surprisal = surprisal.mean().item()
+            max_surprisal = surprisal.max().item()
+            print(f"  평균 surprisal: {avg_surprisal:.4f}")
+            print(f"  최대 surprisal: {max_surprisal:.4f}")
         
         # y는 [N, L, p*p*3] 형태의 patchified 예측
         # unpatchify를 사용하여 이미지로 복원
@@ -133,7 +148,106 @@ def run_one_image(img, model, mask_ratio=0.75, device='cpu'):
         # 복원된 이미지와 마스크된 부분 결합
         im_paste = x * (1 - mask) + y * mask
 
-    return x[0].numpy(), y[0].numpy(), im_masked[0].numpy(), im_paste[0].numpy(), mask[0].numpy()
+    return x[0].numpy(), y[0].numpy(), im_masked[0].numpy(), im_paste[0].numpy(), mask[0].numpy(), surprisal
+
+
+def visualize_surprisal(im, mask, surprisal, output_path, title_suffix=""):
+    """
+    Surprisal 맵 시각화
+    """
+    if surprisal is None:
+        return
+
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+
+    # 원본 이미지
+    axes[0, 0].imshow(im)
+    axes[0, 0].set_title(f'원본 이미지 {title_suffix}')
+    axes[0, 0].axis('off')
+
+    # 마스크
+    mask_vis = mask[:, :, 0]  # 마스크는 모든 채널이 같음
+    axes[0, 1].imshow(mask_vis, cmap='gray')
+    axes[0, 1].set_title(f'마스킹 패턴 {title_suffix}')
+    axes[0, 1].axis('off')
+
+    # Surprisal 히트맵 (16x16 패치로 리사이즈)
+    if isinstance(surprisal, torch.Tensor):
+        surprisal_np = surprisal.squeeze().cpu().numpy()
+    else:
+        surprisal_np = surprisal
+
+    # 196개의 패치를 14x14 그리드로 재배열 (ViT-Base: 224/16 = 14)
+    grid_size = int(np.sqrt(len(surprisal_np)))
+    surprisal_grid = surprisal_np.reshape(grid_size, grid_size)
+
+    im_surprisal = axes[0, 2].imshow(surprisal_grid, cmap='hot', interpolation='nearest')
+    axes[0, 2].set_title(f'Surprisal 맵 {title_suffix}')
+    axes[0, 2].axis('off')
+    plt.colorbar(im_surprisal, ax=axes[0, 2], shrink=0.8)
+
+    # Surprisal 분포 히스토그램
+    axes[1, 0].hist(surprisal_np, bins=50, alpha=0.7, color='red')
+    axes[1, 0].set_title(f'Surprisal 분포 {title_suffix}')
+    axes[1, 0].set_xlabel('Surprisal 값')
+    axes[1, 0].set_ylabel('빈도')
+
+    # Surprisal 통계
+    axes[1, 1].text(0.1, 0.8, f'평균: {surprisal_np.mean():.4f}', fontsize=12)
+    axes[1, 1].text(0.1, 0.6, f'표준편차: {surprisal_np.std():.4f}', fontsize=12)
+    axes[1, 1].text(0.1, 0.4, f'최대값: {surprisal_np.max():.4f}', fontsize=12)
+    axes[1, 1].text(0.1, 0.2, f'최소값: {surprisal_np.min():.4f}', fontsize=12)
+    axes[1, 1].set_title(f'Surprisal 통계 {title_suffix}')
+    axes[1, 1].set_xlim(0, 1)
+    axes[1, 1].set_ylim(0, 1)
+    axes[1, 1].axis('off')
+
+    # 마스킹된 영역 vs 마스킹되지 않은 영역의 surprisal 비교
+    masked_surprisal = surprisal_np[mask_vis.flatten() > 0.5]
+    unmasked_surprisal = surprisal_np[mask_vis.flatten() <= 0.5]
+
+    if len(masked_surprisal) > 0 and len(unmasked_surprisal) > 0:
+        axes[1, 2].boxplot([unmasked_surprisal, masked_surprisal],
+                          labels=['마스킹되지 않음', '마스킹됨'])
+        axes[1, 2].set_title(f'영역별 Surprisal 비교 {title_suffix}')
+        axes[1, 2].set_ylabel('Surprisal 값')
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.close()
+
+    print(f"✓ Surprisal 분석 결과 저장: {output_path}")
+
+
+def analyze_infomae_model(model, args):
+    """
+    InfoMAE 모델 분석
+    """
+    print("\n=== InfoMAE 모델 분석 ===")
+
+    if hasattr(model, 'use_surprisal_attention') and model.use_surprisal_attention:
+        print("✓ Surprisal-Weighted Attention (SWA) 활성화")
+        print(f"  Surprisal Lambda: {model.surprisal_lambda}")
+    else:
+        print("✗ Surprisal-Weighted Attention 비활성화")
+
+    # 파라미터 수 계산
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    print(f"총 파라미터 수: {total_params:,}")
+    print(f"학습 가능 파라미터 수: {trainable_params:,}")
+
+    # 각 컴포넌트별 파라미터 수
+    encoder_params = sum(p.numel() for name, p in model.named_parameters()
+                        if 'encoder' in name or 'blocks' in name)
+    decoder_params = sum(p.numel() for name, p in model.named_parameters()
+                        if 'decoder' in name)
+
+    print(f"  인코더 파라미터: {encoder_params:,}")
+    print(f"  디코더 파라미터: {decoder_params:,}")
+
+    print("=" * 30)
 
 
 def main():
@@ -184,8 +298,11 @@ def main():
     # 모델 로드
     print("모델 로드 중...")
     try:
-        model = prepare_model(args.ckpt, args.model, device=device)
-        print("✓ 모델 로드 완료")
+    model = prepare_model(args.ckpt, args.model, device=device)
+    print("✓ 모델 로드 완료")
+
+    # InfoMAE 모델 분석
+    analyze_infomae_model(model, args)
         print(f"모델 파라미터 수: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
     except Exception as e:
         print(f"오류: 모델 로드 실패: {e}")
@@ -245,7 +362,7 @@ def main():
     # 복원 실행
     print("\n복원 실행 중...")
     try:
-        x, y, im_masked, im_paste, mask = run_one_image(img_tensor, model, mask_ratio=args.mask_ratio, device=device)
+        x, y, im_masked, im_paste, mask, surprisal = run_one_image(img_tensor, model, mask_ratio=args.mask_ratio, device=device)
         print("✓ 복원 완료")
     except Exception as e:
         print(f"오류: 복원 실패: {e}")
@@ -279,7 +396,12 @@ def main():
     plt.tight_layout()
     plt.savefig(args.output, dpi=150, bbox_inches='tight')
     print(f"✓ 결과 저장: {args.output}")
-    
+
+    # InfoMAE: Surprisal 분석 및 시각화
+    if surprisal is not None:
+        surprisal_output = args.output.replace('.png', '_surprisal.png')
+        visualize_surprisal(im, mask, surprisal, surprisal_output, "(InfoMAE)")
+
     print("\n" + "=" * 60)
     print("테스트 완료!")
     print("=" * 60)

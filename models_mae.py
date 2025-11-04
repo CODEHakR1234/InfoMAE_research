@@ -17,6 +17,59 @@ import torch.nn as nn
 from timm.models.vision_transformer import PatchEmbed, Block
 
 from util.pos_embed import get_2d_sincos_pos_embed
+from util.infomae_utils import calculate_surprisal, apply_adaptive_masking, information_bottleneck_loss
+
+
+class InfoMAEBlock(Block):
+    """Extended Block with Surprisal-Weighted Attention (SWA)"""
+
+    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None,
+                 drop=0., attn_drop=0., drop_path=0., norm_layer=nn.LayerNorm,
+                 use_surprisal_attention=False, surprisal_lambda=1.0):
+        super().__init__(dim, num_heads, mlp_ratio, qkv_bias, qk_scale,
+                        drop, attn_drop, drop_path, norm_layer)
+
+        self.use_surprisal_attention = use_surprisal_attention
+        self.surprisal_lambda = surprisal_lambda
+
+        # Surprisal attention components
+        if use_surprisal_attention:
+            self.surprisal_proj = nn.Linear(dim, 1)  # Project to scalar surprisal per token
+
+    def forward(self, x, surprisal=None):
+        """
+        Args:
+            x: Input tensor (batch_size, seq_len, embed_dim)
+            surprisal: Surprisal values (batch_size, seq_len) or None
+        """
+        if self.use_surprisal_attention and surprisal is not None:
+            # Apply surprisal-weighted attention
+            x = x + self._surprisal_drop_path(self.attn(self.norm1(x), surprisal))
+        else:
+            # Standard attention
+            x = x + self.drop_path(self.attn(self.norm1(x)))
+
+        x = x + self.drop_path(self.mlp(self.norm2(x)))
+        return x
+
+    def _surprisal_drop_path(self, x, surprisal):
+        """Apply drop path considering surprisal importance"""
+        if not self.training or self.drop_path_rate == 0.:
+            return x
+
+        # Use surprisal to modulate drop path probability
+        # Higher surprisal -> lower drop probability (more important)
+        keep_prob = 1 - self.drop_path_rate
+        if surprisal is not None:
+            # Modulate keep probability based on surprisal
+            surprisal_weight = torch.sigmoid(-surprisal.mean(dim=-1, keepdim=True))  # (batch, seq_len, 1)
+            keep_prob = keep_prob * (0.5 + 0.5 * surprisal_weight.squeeze(-1).unsqueeze(1))  # Broadcast to (batch, 1, embed_dim)
+
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+        random_tensor.floor_()
+        output = x.div(keep_prob) * random_tensor
+        return output
 
 
 class MaskedAutoencoderViT(nn.Module):
@@ -25,8 +78,14 @@ class MaskedAutoencoderViT(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3,
                  embed_dim=1024, depth=24, num_heads=16,
                  decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False):
+                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False,
+                 # InfoMAE parameters
+                 use_surprisal_attention=False, surprisal_lambda=1.0):
         super().__init__()
+
+        # InfoMAE parameters
+        self.use_surprisal_attention = use_surprisal_attention
+        self.surprisal_lambda = surprisal_lambda
 
         # --------------------------------------------------------------------------
         # MAE encoder specifics
@@ -36,9 +95,16 @@ class MaskedAutoencoderViT(nn.Module):
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim), requires_grad=False)  # fixed sin-cos embedding
 
-        self.blocks = nn.ModuleList([
-            Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer)
-            for i in range(depth)])
+        # Use InfoMAE blocks if surprisal attention is enabled
+        if use_surprisal_attention:
+            self.blocks = nn.ModuleList([
+                InfoMAEBlock(embed_dim, num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer,
+                           use_surprisal_attention=True, surprisal_lambda=surprisal_lambda)
+                for i in range(depth)])
+        else:
+            self.blocks = nn.ModuleList([
+                Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer)
+                for i in range(depth)])
         self.norm = norm_layer(embed_dim)
         # --------------------------------------------------------------------------
 
@@ -147,24 +213,49 @@ class MaskedAutoencoderViT(nn.Module):
 
         return x_masked, mask, ids_restore
 
-    def forward_encoder(self, x, mask_ratio):
+    def adaptive_masking(self, x, mask):
+        """
+        Apply adaptive masking using pre-computed mask
+        Args:
+            x: patch embeddings (N, L, D)
+            mask: binary mask (N, L) where 1=keep, 0=mask
+        """
+        N, L, D = x.shape  # batch, length, dim
+
+        # Apply mask: keep tokens where mask=1
+        x_masked = x[mask.bool()].reshape(N, -1, D)  # (N, len_keep, D)
+
+        # Create ids_restore for unmasking
+        ids_restore = torch.argsort(mask.long(), dim=1, stable=True)
+
+        return x_masked, mask, ids_restore
+
+    def forward_encoder(self, x, mask_ratio, adaptive_mask=None, surprisal=None):
         # embed patches
         x = self.patch_embed(x)
 
         # add pos embed w/o cls token
         x = x + self.pos_embed[:, 1:, :]
 
-        # masking: length -> length * mask_ratio
-        x, mask, ids_restore = self.random_masking(x, mask_ratio)
+        # masking: length -> length * mask_ratio or use adaptive mask
+        if adaptive_mask is not None:
+            # Use provided adaptive mask
+            x, mask, ids_restore = self.adaptive_masking(x, adaptive_mask)
+        else:
+            # Standard random masking
+            x, mask, ids_restore = self.random_masking(x, mask_ratio)
 
         # append cls token
         cls_token = self.cls_token + self.pos_embed[:, :1, :]
         cls_tokens = cls_token.expand(x.shape[0], -1, -1)
         x = torch.cat((cls_tokens, x), dim=1)
 
-        # apply Transformer blocks
+        # apply Transformer blocks with optional surprisal attention
         for blk in self.blocks:
-            x = blk(x)
+            if isinstance(blk, InfoMAEBlock) and surprisal is not None:
+                x = blk(x, surprisal)
+            else:
+                x = blk(x)
         x = self.norm(x)
 
         return x, mask, ids_restore
@@ -195,11 +286,12 @@ class MaskedAutoencoderViT(nn.Module):
 
         return x
 
-    def forward_loss(self, imgs, pred, mask):
+    def forward_loss(self, imgs, pred, mask, beta_ib=0.0):
         """
         imgs: [N, 3, H, W]
         pred: [N, L, p*p*3]
-        mask: [N, L], 0 is keep, 1 is remove, 
+        mask: [N, L], 0 is keep, 1 is remove,
+        beta_ib: Information Bottleneck regularization weight
         """
         target = self.patchify(imgs)
         if self.norm_pix_loss:
@@ -210,14 +302,32 @@ class MaskedAutoencoderViT(nn.Module):
         loss = (pred - target) ** 2
         loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
 
-        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
-        return loss
+        # Calculate surprisal (reconstruction loss per patch)
+        surprisal = loss.clone().detach()  # [N, L]
 
-    def forward(self, imgs, mask_ratio=0.75):
-        latent, mask, ids_restore = self.forward_encoder(imgs, mask_ratio)
+        # Reconstruction loss (mean loss on removed patches)
+        recon_loss = (loss * mask).sum() / mask.sum()
+
+        # Information Bottleneck regularization
+        ib_loss = torch.tensor(0.0, device=loss.device)
+        if beta_ib > 0.0 and hasattr(self, 'norm'):
+            # Use encoder output as latent representation
+            # Get latent representation before decoder
+            with torch.no_grad():
+                latent = self.norm(self.forward_encoder(imgs, 0.0)[0])  # Get full latent with no masking
+
+            # Calculate IB loss between latent and surprisal
+            ib_loss = information_bottleneck_loss(latent[:, 1:, :], surprisal)  # Exclude CLS token
+
+        total_loss = recon_loss + beta_ib * ib_loss
+
+        return total_loss, surprisal
+
+    def forward(self, imgs, mask_ratio=0.75, adaptive_mask=None, surprisal=None, beta_ib=0.0):
+        latent, mask, ids_restore = self.forward_encoder(imgs, mask_ratio, adaptive_mask, surprisal)
         pred = self.forward_decoder(latent, ids_restore)  # [N, L, p*p*3]
-        loss = self.forward_loss(imgs, pred, mask)
-        return loss, pred, mask
+        loss, surprisal = self.forward_loss(imgs, pred, mask, beta_ib)
+        return loss, pred, mask, surprisal
 
 
 def mae_vit_base_patch16_dec512d8b(**kwargs):

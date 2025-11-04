@@ -23,15 +23,10 @@ from torch.utils.tensorboard import SummaryWriter
 
 import timm
 
-# timm 1.0.x 호환
+assert timm.__version__ == "0.3.2" # version check
 from timm.models.layers import trunc_normal_
-from timm.data import Mixup
-try:
-    from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
-except ImportError:
-    # timm 1.0.x에서 경로가 변경되었을 수 있음
-    from timm.loss.cross_entropy import LabelSmoothingCrossEntropy
-    SoftTargetCrossEntropy = LabelSmoothingCrossEntropy  # fallback
+from timm.data.mixup import Mixup
+from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 
 import util.lr_decay as lrd
 import util.misc as misc

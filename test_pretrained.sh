@@ -7,8 +7,8 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-# 기본값 설정
-CKPT="./checkpoints/mae_pretrain_vit_base.pth"
+# 기본값 설정 (InfoMAE 훈련 결과 사용)
+CKPT="./output_infomae/stage3/checkpoint-99.pth"
 MODEL="mae_vit_base_patch16"
 DATA_PATH="./data/imagenet100"
 SPLIT="val"  # train 또는 val
@@ -62,8 +62,11 @@ echo "============================================================"
 # 체크포인트 확인
 if [ ! -f "$CKPT" ]; then
     echo "체크포인트를 찾을 수 없습니다: $CKPT"
-    echo "먼저 체크포인트를 다운로드하세요:"
-    echo "  bash download_checkpoints.sh"
+    echo "먼저 InfoMAE 훈련을 완료하세요:"
+    echo "  bash run_infomae_stages.sh"
+    echo ""
+    echo "또는 다른 checkpoint 경로를 지정하세요:"
+    echo "  ./test_pretrained.sh --ckpt /path/to/checkpoint.pth"
     exit 1
 fi
 

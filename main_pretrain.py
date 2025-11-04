@@ -46,6 +46,7 @@ def add_weight_decay(model, weight_decay=1e-5, skip_list=()):
 
 import util.misc as misc
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
+from util.infomae_utils import EpochSurprisalCache, print_infomae_stats, freeze_encoder_blocks
 
 import models_mae
 
@@ -74,6 +75,41 @@ def get_args_parser():
                         help='Use (per-patch) normalized pixels as targets for computing loss')
     parser.set_defaults(norm_pix_loss=False)
 
+    # InfoMAE parameters
+    parser.add_argument('--use_surprisal_attention', action='store_true',
+                        help='Use surprisal-weighted attention (SWA)')
+    parser.set_defaults(use_surprisal_attention=False)
+
+    parser.add_argument('--adaptive_masking', action='store_true',
+                        help='Use adaptive masking based on surprisal')
+    parser.set_defaults(adaptive_masking=False)
+
+    parser.add_argument('--use_epoch_cache', action='store_true',
+                        help='Use epoch-level surprisal cache for adaptive masking')
+    parser.set_defaults(use_epoch_cache=False)
+
+    parser.add_argument('--freeze_encoder', action='store_true',
+                        help='Freeze encoder weights during training')
+    parser.set_defaults(freeze_encoder=False)
+
+    parser.add_argument('--unfreeze_last_n_blocks', type=int, default=0,
+                        help='Unfreeze last N blocks of encoder (only when freeze_encoder=True)')
+
+    parser.add_argument('--surprisal_lambda', type=float, default=1.0,
+                        help='Weight for surprisal in attention mechanism')
+
+    parser.add_argument('--adaptive_alpha', type=float, default=0.0,
+                        help='Alpha parameter for adaptive masking sigmoid')
+
+    parser.add_argument('--adaptive_gamma', type=float, default=1.0,
+                        help='Gamma parameter for adaptive masking sigmoid')
+
+    parser.add_argument('--beta_ib', type=float, default=0.0,
+                        help='Weight for Information Bottleneck regularization')
+
+    parser.add_argument('--cache_precision', type=str, default='float32', choices=['float16', 'float32'],
+                        help='Precision for epoch-level surprisal cache')
+
     # Optimizer parameters
     parser.add_argument('--weight_decay', type=float, default=0.05,
                         help='weight decay (default: 0.05)')
@@ -89,8 +125,8 @@ def get_args_parser():
                         help='epochs to warmup LR')
 
     # Dataset parameters
-    parser.add_argument('--data_path', default='/datasets01/imagenet_full_size/061417/', type=str,
-                        help='dataset path')
+    parser.add_argument('--data_path', default='./data/imagenet100', type=str,
+                        help='dataset path (ImageNet-100 in ImageFolder format)')
 
     parser.add_argument('--output_dir', default='./output_dir',
                         help='path where to save, empty for no saving')
@@ -170,12 +206,30 @@ def main(args):
     )
     
     # define the model
-    model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss)
+    model = models_mae.__dict__[args.model](
+        norm_pix_loss=args.norm_pix_loss,
+        use_surprisal_attention=args.use_surprisal_attention,
+        surprisal_lambda=args.surprisal_lambda
+    )
 
     model.to(device)
 
     model_without_ddp = model
     print("Model = %s" % str(model_without_ddp))
+
+    # InfoMAE initialization
+    surprisal_cache = None
+    if args.adaptive_masking and args.use_epoch_cache:
+        surprisal_cache = EpochSurprisalCache(precision=args.cache_precision)
+        print(f"Initialized epoch-level surprisal cache")
+
+    # Freeze encoder if requested
+    if args.freeze_encoder:
+        freeze_encoder_blocks(model_without_ddp, args.unfreeze_last_n_blocks)
+        print(f"Frozen encoder blocks (unfroze last {args.unfreeze_last_n_blocks} blocks)")
+
+    # Print InfoMAE configuration
+    print_infomae_stats(args, surprisal_cache)
 
     eff_batch_size = args.batch_size * args.accum_iter * misc.get_world_size()
     
@@ -206,12 +260,19 @@ def main(args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
+
+        # InfoMAE: Pass surprisal cache for adaptive masking
         train_stats = train_one_epoch(
             model, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             log_writer=log_writer,
-            args=args
+            args=args,
+            surprisal_cache=surprisal_cache
         )
+
+        # InfoMAE: Save cache at end of epoch
+        if surprisal_cache is not None:
+            surprisal_cache.save_cache()
         if args.output_dir and (epoch % 20 == 0 or epoch + 1 == args.epochs):
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,

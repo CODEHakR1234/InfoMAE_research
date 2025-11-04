@@ -25,7 +25,7 @@ import torchvision.datasets as datasets
 
 import timm
 
-# timm 1.0.x 호환
+assert timm.__version__ == "0.3.2" # version check
 from timm.models.layers import trunc_normal_
 
 import util.misc as misc
