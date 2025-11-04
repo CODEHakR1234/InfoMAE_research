@@ -25,8 +25,8 @@ def prepare_model(chkpt_dir, arch='mae_vit_base_patch16', device='cpu'):
     # 모델 생성
     model = models_mae.__dict__[arch]()
     
-    # 체크포인트 로드
-    checkpoint = torch.load(chkpt_dir, map_location='cpu')
+    # 체크포인트 로드 (PyTorch 2.6+ 호환)
+    checkpoint = torch.load(chkpt_dir, map_location='cpu', weights_only=False)
     print(f"체크포인트 키: {list(checkpoint.keys())}")
     
     # 모델 가중치 로드
@@ -400,7 +400,7 @@ def main():
     # InfoMAE: Surprisal 분석 및 시각화
     if surprisal is not None:
         surprisal_output = args.output.replace('.png', '_surprisal.png')
-        visualize_surprisal(im, mask, surprisal, surprisal_output, "(InfoMAE)")
+        visualize_surprisal(im_masked, mask, surprisal, surprisal_output, "(InfoMAE)")
 
     print("\n" + "=" * 60)
     print("테스트 완료!")
