@@ -33,6 +33,15 @@ python main_pretrain.py \
     --freeze_encoder \
     --resume ./checkpoints/mae_pretrain_vit_base.pth
 
+# Stage 0 완료 후 중간 테스트 실행
+echo "========================================"
+echo "Stage 0 완료 - 중간 결과 테스트"
+echo "========================================"
+if [ -f "${OUTPUT_DIR}/stage0/checkpoint-19.pth" ]; then
+    ./test_pretrained.sh --ckpt ${OUTPUT_DIR}/stage0/checkpoint-19.pth --output ${OUTPUT_DIR}/stage0/test_stage0.png
+    echo "✓ Stage 0 중간 결과 저장: ${OUTPUT_DIR}/stage0/test_stage0.png"
+fi
+
 # Stage 0의 surprisal cache를 공유 디렉토리로 복사
 if [ -f "${OUTPUT_DIR}/stage0/surprisal_cache/surprisal_cache.pkl" ]; then
     cp ${OUTPUT_DIR}/stage0/surprisal_cache/surprisal_cache.pkl ${SHARED_CACHE_DIR}/
@@ -64,6 +73,15 @@ python main_pretrain.py \
     --use_surprisal_attention \
     --surprisal_lambda 1.0 \
     --resume ${OUTPUT_DIR}/stage0/checkpoint-19.pth
+
+# Stage 1 완료 후 중간 테스트 실행
+echo "========================================"
+echo "Stage 1 완료 - 중간 결과 테스트"
+echo "========================================"
+if [ -f "${OUTPUT_DIR}/stage1/checkpoint-99.pth" ]; then
+    ./test_pretrained.sh --ckpt ${OUTPUT_DIR}/stage1/checkpoint-99.pth --output ${OUTPUT_DIR}/stage1/test_stage1.png
+    echo "✓ Stage 1 중간 결과 저장: ${OUTPUT_DIR}/stage1/test_stage1.png"
+fi
 
 # Stage 2: Adaptive 실험 (Stage 0 cache 기반)
 echo "========================================"
@@ -97,6 +115,15 @@ python main_pretrain.py \
     --beta_ib 0.02 \
     --resume ${OUTPUT_DIR}/stage0/checkpoint-19.pth
 
+# Stage 2 완료 후 중간 테스트 실행
+echo "========================================"
+echo "Stage 2 완료 - 중간 결과 테스트"
+echo "========================================"
+if [ -f "${OUTPUT_DIR}/stage2/checkpoint-99.pth" ]; then
+    ./test_pretrained.sh --ckpt ${OUTPUT_DIR}/stage2/checkpoint-99.pth --output ${OUTPUT_DIR}/stage2/test_stage2.png
+    echo "✓ Stage 2 중간 결과 저장: ${OUTPUT_DIR}/stage2/test_stage2.png"
+fi
+
 # Stage 3: Full 실험 (Stage 0 cache 기반)
 echo "========================================"
 echo "Stage 3: Full 실험 (Stage 0 cache 기반)"
@@ -129,10 +156,33 @@ python main_pretrain.py \
     --beta_ib 0.02 \
     --resume ${OUTPUT_DIR}/stage0/checkpoint-19.pth
 
+# Stage 3 완료 후 최종 테스트 실행
 echo "========================================"
-echo "InfoMAE 단계별 훈련 완료!"
-echo "Stage 0 (Warmup): ${OUTPUT_DIR}/stage0/checkpoint-19.pth"
-echo "Stage 1 (SWA): ${OUTPUT_DIR}/stage1/checkpoint-99.pth"
-echo "Stage 2 (Adaptive): ${OUTPUT_DIR}/stage2/checkpoint-99.pth"
-echo "Stage 3 (Full): ${OUTPUT_DIR}/stage3/checkpoint-99.pth"
+echo "Stage 3 완료 - 최종 결과 테스트"
+echo "========================================"
+if [ -f "${OUTPUT_DIR}/stage3/checkpoint-99.pth" ]; then
+    ./test_pretrained.sh --ckpt ${OUTPUT_DIR}/stage3/checkpoint-99.pth --output ${OUTPUT_DIR}/stage3/test_stage3_final.png
+    echo "✓ Stage 3 최종 결과 저장: ${OUTPUT_DIR}/stage3/test_stage3_final.png"
+fi
+
+echo "========================================"
+echo "InfoMAE 단계별 훈련 및 테스트 완료!"
+echo ""
+echo "📁 Checkpoint 파일들:"
+echo "  Stage 0 (Warmup): ${OUTPUT_DIR}/stage0/checkpoint-19.pth"
+echo "  Stage 1 (SWA): ${OUTPUT_DIR}/stage1/checkpoint-99.pth"
+echo "  Stage 2 (Adaptive): ${OUTPUT_DIR}/stage2/checkpoint-99.pth"
+echo "  Stage 3 (Full): ${OUTPUT_DIR}/stage3/checkpoint-99.pth"
+echo ""
+echo "🖼️  시각화 결과들:"
+echo "  Stage 0: ${OUTPUT_DIR}/stage0/test_stage0.png"
+echo "  Stage 1: ${OUTPUT_DIR}/stage1/test_stage1.png"
+echo "  Stage 2: ${OUTPUT_DIR}/stage2/test_stage2.png"
+echo "  Stage 3: ${OUTPUT_DIR}/stage3/test_stage3_final.png"
+echo ""
+echo "📊 TensorBoard 로그:"
+echo "  tensorboard --logdir ${OUTPUT_DIR}/stage0"
+echo "  tensorboard --logdir ${OUTPUT_DIR}/stage1"
+echo "  tensorboard --logdir ${OUTPUT_DIR}/stage2"
+echo "  tensorboard --logdir ${OUTPUT_DIR}/stage3"
 echo "========================================"
