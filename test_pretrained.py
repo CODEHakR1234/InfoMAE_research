@@ -298,11 +298,11 @@ def main():
     # 모델 로드
     print("모델 로드 중...")
     try:
-    model = prepare_model(args.ckpt, args.model, device=device)
-    print("✓ 모델 로드 완료")
+        model = prepare_model(args.ckpt, args.model, device=device)
+        print("✓ 모델 로드 완료")
 
-    # InfoMAE 모델 분석
-    analyze_infomae_model(model, args)
+        # InfoMAE 모델 분석
+        analyze_infomae_model(model, args)
         print(f"모델 파라미터 수: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
     except Exception as e:
         print(f"오류: 모델 로드 실패: {e}")
