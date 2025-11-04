@@ -4,6 +4,15 @@
 체크포인트를 로드하고 이미지 복원 결과를 시각화합니다.
 """
 
+# PyTorch 2.6+ compatibility patch for timm
+if not hasattr(torch, '_six'):
+    import collections.abc as container_abcs
+    class _Six:
+        container_abcs = container_abcs
+    torch._six = _Six()
+    import sys
+    sys.modules['torch._six'] = torch._six
+
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
