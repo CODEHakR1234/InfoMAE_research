@@ -42,10 +42,10 @@ python main_pretrain.py \
     --output_dir ${OUTPUT_DIR}/stage0 \
     --log_dir ${OUTPUT_DIR}/stage0 \
     --model ${MODEL} \
-    --batch_size 64 \
+    --batch_size 256 \
     --epochs 50 \
     --warmup_epochs 10 \
-    --blr 1e-3 \
+    --blr 2e-3 \
     --weight_decay 0.05 \
     --mask_ratio 0.75 \
     --freeze_encoder \
@@ -86,10 +86,10 @@ python main_pretrain.py \
     --output_dir ${OUTPUT_DIR}/stage1 \
     --log_dir ${OUTPUT_DIR}/stage1 \
     --model ${MODEL} \
-    --batch_size 64 \
+    --batch_size 256 \
     --epochs 100 \
     --warmup_epochs 10 \
-    --blr 1e-3 \
+    --blr 2e-3 \
     --weight_decay 0.05 \
     --mask_ratio 0.75 \
     --use_surprisal_attention \
@@ -123,10 +123,10 @@ python main_pretrain.py \
     --output_dir ${OUTPUT_DIR}/stage2 \
     --log_dir ${OUTPUT_DIR}/stage2 \
     --model ${MODEL} \
-    --batch_size 64 \
+    --batch_size 256 \
     --epochs 100 \
     --warmup_epochs 10 \
-    --blr 1e-3 \
+    --blr 2e-3 \
     --weight_decay 0.05 \
     --mask_ratio 0.75 \
     --use_surprisal_attention \
@@ -166,10 +166,10 @@ python main_pretrain.py \
     --output_dir ${OUTPUT_DIR}/stage3 \
     --log_dir ${OUTPUT_DIR}/stage3 \
     --model ${MODEL} \
-    --batch_size 64 \
+    --batch_size 256 \
     --epochs 100 \
     --warmup_epochs 10 \
-    --blr 1e-3 \
+    --blr 2e-3 \
     --weight_decay 0.05 \
     --mask_ratio 0.75 \
     --use_surprisal_attention \
