@@ -202,9 +202,22 @@ def visualize_surprisal(im, mask, surprisal, output_path, title_suffix=""):
     axes[1, 1].set_ylim(0, 1)
     axes[1, 1].axis('off')
 
+    # 마스크를 패치 단위로 변환 (224x224 -> 14x14)
+    # 각 16x16 패치를 대표하는 값으로 다운샘플링
+    patch_size = 16  # ViT-Base 패치 크기
+    grid_size = 224 // patch_size  # 14
+
+    # 마스크를 패치별로 변환 (각 패치의 평균값 사용)
+    mask_patches = []
+    for i in range(grid_size):
+        for j in range(grid_size):
+            patch_mask = mask_vis[i*patch_size:(i+1)*patch_size, j*patch_size:(j+1)*patch_size]
+            mask_patches.append(patch_mask.mean())
+    mask_patches = np.array(mask_patches)  # (196,)
+
     # 마스킹된 영역 vs 마스킹되지 않은 영역의 surprisal 비교
-    masked_surprisal = surprisal_np[mask_vis.flatten() > 0.5]
-    unmasked_surprisal = surprisal_np[mask_vis.flatten() <= 0.5]
+    masked_surprisal = surprisal_np[mask_patches > 0.5]
+    unmasked_surprisal = surprisal_np[mask_patches <= 0.5]
 
     if len(masked_surprisal) > 0 and len(unmasked_surprisal) > 0:
         axes[1, 2].boxplot([unmasked_surprisal, masked_surprisal],
